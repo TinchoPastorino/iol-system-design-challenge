@@ -34,8 +34,8 @@
       ] },
       "options": { "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] }, "pieType": "donut", "reduceOptions": { "calcs": ["lastNotNull"] }, "tooltip": { "mode": "single" } },
       "targets": [
-        { "expr": "rate_limiter_allowed_total", "legendFormat": "Allowed" },
-        { "expr": "rate_limiter_rejected_total", "legendFormat": "Rejected" }
+        { "expr": "increase(rate_limiter_allowed_total[1h])", "legendFormat": "Allowed" },
+        { "expr": "increase(rate_limiter_rejected_total[1h])", "legendFormat": "Rejected" }
       ]
     },
     {
@@ -117,7 +117,7 @@
       "gridPos": { "h": 8, "w": 20, "x": 0, "y": 32 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        { "expr": "rate_limiter_rejected_by_user_total", "instant": true, "format": "table" }
+        { "expr": "increase(rate_limiter_rejected_by_user_total[1h])", "instant": true, "format": "table" }
       ],
       "options": {
         "showHeader": true,

@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -38,9 +40,13 @@ public class RateLimiterHttpServer {
         server.createContext("/allow", new AllowEndpointHandler(rateLimiter, latencyTracker, rejectedPerUser));
         server.createContext("/metrics", new MetricsEndpointHandler(rateLimiter, latencyTracker));
         server.createContext("/metrics/prometheus", new PrometheusEndpointHandler(rateLimiter, latencyTracker, rejectedPerUser));
-        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+        
+        // Optimización Senio: Pool dinámico basado en núcleos
+        int nThreads = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
+        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(nThreads));
+        
         server.start();
-        logger.info("Rate Limiter HTTP server started on port " + port);
+        logger.info("Rate Limiter HTTP server started on port " + port + " with " + nThreads + " threads.");
     }
 
     /**
@@ -238,14 +244,20 @@ public class RateLimiterHttpServer {
         }
 
         private String parseUserId(String query) {
-            if (query == null)
+            if (query == null || query.isEmpty())
                 return null;
-            String[] pairs = query.split("&");
-            for (String pair : pairs) {
-                String[] kv = pair.split("=");
-                if (kv.length == 2 && "userId".equals(kv[0])) {
-                    return kv[1];
+            try {
+                // Robust parsing using URI decoding
+                String[] pairs = query.split("&");
+                for (String pair : pairs) {
+                    int idx = pair.indexOf("=");
+                    String key = idx > 0 ? URLDecoder.decode(pair.substring(0, idx), StandardCharsets.UTF_8) : pair;
+                    if ("userId".equals(key) && idx > 0 && pair.length() > idx + 1) {
+                        return URLDecoder.decode(pair.substring(idx + 1), StandardCharsets.UTF_8);
+                    }
                 }
+            } catch (Exception e) {
+                logger.log(Level.WARNING, "Error parsing userId from query: " + query, e);
             }
             return null;
         }

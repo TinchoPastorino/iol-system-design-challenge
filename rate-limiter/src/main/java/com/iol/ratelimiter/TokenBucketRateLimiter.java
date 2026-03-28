@@ -11,6 +11,8 @@ import java.util.concurrent.TimeUnit;
 public class TokenBucketRateLimiter implements RateLimiter {
     private static final Logger logger = Logger.getLogger(TokenBucketRateLimiter.class.getName());
     
+    private static final long STALE_BUCKET_THRESHOLD_NS = TimeUnit.HOURS.toNanos(1);
+    
     private final int capacity;
     private final double refillRate;
     private final ConcurrentHashMap<String, Bucket> buckets;
@@ -32,19 +34,15 @@ public class TokenBucketRateLimiter implements RateLimiter {
         });
         
         // Runs memory cleanup every hour
-        this.cleanupExecutor.scheduleAtFixedRate(this::cleanupObsoleteBuckets, 1, 1, TimeUnit.HOURS);
+        this.cleanupExecutor.scheduleAtFixedRate(this::cleanupStaleBuckets, 1, 1, TimeUnit.HOURS);
     }
     
-    private void cleanupObsoleteBuckets() {
+    private void cleanupStaleBuckets() {
         long now = System.nanoTime();
-        // Evict buckets with no activity for more than 1 hour
-        long maxIdleNanos = TimeUnit.HOURS.toNanos(1); 
-        
+        // Use lastAccessTimestamp to ensure we don't remove buckets of active users 
+        // who just haven't needed to refill/consume recently.
         int initialSize = buckets.size();
-        buckets.entrySet().removeIf(entry -> {
-            long lastRefill = entry.getValue().getLastRefillTimestamp();
-            return (now - lastRefill) > maxIdleNanos;
-        });
+        buckets.entrySet().removeIf(entry -> (now - entry.getValue().getLastAccessTimestamp()) > STALE_BUCKET_THRESHOLD_NS);
         int removed = initialSize - buckets.size();
         if (removed > 0) {
             logger.log(Level.INFO, "Memory Cleanup: removed {0} inactive buckets", removed);

@@ -14,14 +14,16 @@ Este documento detalla la arquitectura, decisiones de diseño y compensaciones (
 ### 2. Concurrencia y Thread-Safety
 - **Aislamiento por Usuario:** Los límites se aislan por `userId`. No hay un bloqueo global del servidor.
 - **Locking Fino:** Se usa `ConcurrentHashMap#computeIfAbsent` para la creación atómica de baldes y `synchronized` interno en la clase `Bucket` para la recarga de tokens. Esto permite que miles de usuarios sean procesados en paralelo sin interferencias.
+- **Eficiencia de Recursos:** El servidor utiliza un pool de hilos dinámico (`Executors.newFixedThreadPool`) cuyo tamaño se ajusta automáticamente según la cantidad de núcleos disponibles en el sistema (`Runtime.getRuntime().availableProcessors()`), asegurando un uso óptimo de la CPU sin sobrecarga.
 
 ### 3. Precisión Matemática (Anti-Drift)
-- **Aritmética de Longs:** Se usa `long` para el conteo de tokens y timestamps en nanosegundos (`System.nanoTime()`). Se evita el uso de `double` para prevenir el "floating-point drift" (pérdida de precisión decimal) tras millones de operaciones.
-- **Recarga Exacta:** El método `refill()` solo avanza el "último tiempo de recarga" por el tiempo exacto consumido por los tokens generados. Si sobran nanosegundos que no llegan a formar un token completo, se guardan para la próxima petición. **No se desperdicia tiempo.**
+- **Aritmética de Longs (Integer Precision):** Se eliminó por completo el uso de coma flotante (`double`) en los cálculos críticos. La tasa de recarga se convierte internamente a un intervalo de nanosegundos por token (`nanosPerToken`). 
+- **Determinismo Total:** Al usar solo aritmética entera de `long`, se elimina cualquier posibilidad de "floating-point drift" (pérdida de precisión decimal acumulada) incluso tras miles de millones de operaciones, garantizando un rellenado exacto y determinista.
+- **Recarga Exacta:** El método `refill()` solo avanza el timestamp por múltiplos exactos del intervalo entre tokens. Los nanosegundos sobrantes se mantienen en el acumulador para el siguiente ciclo. **No se desperdicia ni un solo nanosegundo.**
 
 ### 4. Prevención de Memory Leaks (Eviction)
-- Un hilo **Daemon** (`ScheduledExecutorService`) corre cada 1 hora y elimina de la memoria los baldes de usuarios que no han tenido actividad por más de 60 minutos. 
-- Esto garantiza que el servidor pueda estar prendido meses sin agotar la RAM por usuarios esporádicos.
+- Un hilo **Daemon** (`ScheduledExecutorService`) corre periódicamente y elimina de la memoria los baldes de usuarios inactivos.
+- **Criterio de Inactividad Senior:** A diferencia de implementaciones básicas, usamos un `lastAccessTimestamp` dedicado. Un balde solo se considera "stale" (caduco) si el usuario no ha realizado ninguna petición (exitosa o fallida) en 60 minutos, evitando el borrado accidental de usuarios activos cuyos baldes están simplemente llenos.
 
 ---
 
@@ -53,12 +55,31 @@ El proyecto no es solo código; es "operable". Se implementó un stack completo 
 
 ## 🚀 Escalabilidad Futura (System Design Interview)
 
-Si este sistema debiera escalar para manejar **millones de requests por segundo** en un entorno de alta demanda, el camino de evolución sería:
+Si este sistema debiera escalar para manejar **millones de requests por segundo** en un entorno de alta demanda, la evolución no sería simplemente "más servidores", sino un clúster inteligente:
 
-1.  **Load Balancer con Sticky Sessions:** Usar Consistent Hashing (por `userId` o IP) para asegurar que un usuario siempre caiga en el mismo nodo. Esto mantiene la ventaja de la latencia de RAM local sin necesidad de una base centralizada.
-2.  **Capa Central de Estado (Redis):** Si la precisión absoluta entre nodos es requerida, se reemplazaría la lógica de `Bucket.java` por un script de LUA en Redis. Esto permitiría escalabilidad horizontal infinita a costa de un ligero incremento en la latencia.
-3.  **Local Cache + Redis:** Un esquema híbrido donde se descuentan tokens localmente y se sincronizan en lotes (batch) con Redis para balancear precisión y velocidad.
-4.  **Java 21 (Virtual Threads):** Migrar a Java 21 permitiría reemplazar el pool de hilos fijos por `Virtual Threads` (Proyecto Loom), escalando a millones de peticiones concurrentes con un impacto mínimo en el consumo de memoria del sistema operativo y eliminando cuellos de botella por hilos bloqueados.
+```mermaid
+graph TD
+    Client1[Cliente A] --> LB[Nginx Load Balancer]
+    Client2[Cliente B] --> LB
+    Client3[Cliente C] --> LB
+
+    lb_logic{Consistent Hashing<br/>by userId}
+    LB --> lb_logic
+
+    lb_logic -- "userId: 123" --> Srv1[Rate Limiter Node A<br/>Memory: 50k buckets]
+    lb_logic -- "userId: 456" --> Srv2[Rate Limiter Node B<br/>Memory: 50k buckets]
+    lb_logic -- "userId: 789" --> Srv3[Rate Limiter Node C<br/>Memory: 50k buckets]
+
+    Srv1 --> Metrics[Prometheus Stack]
+    Srv2 --> Metrics
+    Srv3 --> Metrics
+```
+
+### Por qué esta arquitectura:
+1.  **Consistent Hashing (Sticky Sessions):** Usar el `userId` como clave de hash asegura que un usuario siempre caiga en el mismo nodo. Esto permite mantener la latencia de nanosegundos de la RAM local sin necesidad de una base de datos centralizada (como Redis) que sumaría milisegundos de red.
+2.  **Capa de Estado (Redis / LUA):** Solo si la precisión absoluta entre nodos fuera crítica (ej: evitar que un usuario "salte" de nodo y gane tokens), se reemplazaría el `Bucket.java` por un script de LUA en Redis.
+3.  **Local Cache + Redis Sync:** Un esquema híbrido donde se descuentan tokens localmente y se sincronizan en lotes (batch) con Redis para balancear precisión extrema y velocidad máxima.
+4.  **Java 21 (Virtual Threads):** Migrar a Java 21 permitiría reemplazar el pool de hilos fijos por `Virtual Threads` (Proyecto Loom), escalando a millones de peticiones concurrentes con un impacto mínimo en memoria.
 
 ---
 
