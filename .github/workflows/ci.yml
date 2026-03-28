@@ -7,65 +7,91 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-and-test:
-    name: Build, Test & E2E Validation - Java ${{ matrix.java-version }}
+  compile:
+    name: 🏗️ Compilar (Syntax Check)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rate-limiter
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+      - name: Validar Sintaxis (Compile)
+        run: mvn -B clean compile
+
+  unit-tests:
+    name: 🧪 Unit Tests - Java ${{ matrix.java-version }}
+    needs: [compile]
     runs-on: ubuntu-latest
     strategy:
       matrix:
         java-version: ['17', '21']
-    
-    # Defaults para que todos los comandos 'run' se ejecuten en la carpeta rate-limiter
     defaults:
       run:
         working-directory: rate-limiter
-
     steps:
-    # 1. Trae el código del repositorio a la máquina virtual
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - name: Setup Java ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+          cache: maven
+      - name: Correr Pruebas (Test)
+        run: mvn -B test
+      - name: Upload JaCoCo XML (para el paso de coverage)
+        if: matrix.java-version == '17'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: rate-limiter/target/site/jacoco/jacoco.xml
 
-    # 2. Instala Java en la máquina para poder correr Maven
-    - name: Set up JDK ${{ matrix.java-version }}
-      uses: actions/setup-java@v4
-      with:
-        java-version: ${{ matrix.java-version }}
-        distribution: 'temurin'
-        cache: maven
+  coverage:
+    name: 📊 Code Coverage & PR Comment
+    needs: [unit-tests]
+    runs-on: ubuntu-latest
+    # Este paso correrá sólo en los Pull Requests para inyectarte la tablita
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download JaCoCo XML
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco
+      - name: Comentar PR con tabla de Coverage
+        uses: madrapps/jacoco-report@v1.6.1
+        with:
+          paths: target/site/jacoco/jacoco.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 60
+          min-coverage-changed-files: 60
+          title: "Reporte de Testing (JaCoCo) 📊"
+          update-comment: true
 
-    # 3. Construye el proyecto y ejecuta los Unit Tests (BucketTest, etc)
-    - name: Build and run Unit Tests (Maven)
-      run: mvn -B package
-
-    # 4. Construye la imagen de Docker para asegurarnos que el Dockerfile funciona
-    - name: Build Docker Image
-      run: docker build -t ratelimiter-app:latest .
-
-    # 5. Ejecuta la imagen de Docker en background (E2E Environment)
-    - name: Start Docker Container (Background)
-      run: |
-        docker run -d -p 8080:8080 --name ratelimiter ratelimiter-app:latest
-        sleep 5 # Esperar 5 segs a que la JVM y el HTTPServer arranquen
-
-    # 6. Prepara Python para poder lanzar nuestro Load Test
-    - name: Set up Python for Integration Test
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    # 7. Ejecuta el Load Test (Prueba Black-box de Integración y Estrés)
-    - name: Run E2E Load Test (Python)
-      run: python load_test.py --requests 500 --users 5 --host http://127.0.0.1:8080
-
-    # 8. (Opcional) Si algo falló en el pipeline, imprime los logs del servidor HTTP
-    - name: Check Container Logs (On Failure)
-      if: failure()
-      run: docker logs ratelimiter
-
-    # 9. Sube el reporte HTML de JaCoCo (solo para Java 17 para evitar duplicados)
-    - name: Upload JaCoCo Code Coverage Report
-      uses: actions/upload-artifact@v4
-      if: matrix.java-version == '17'
-      with:
-        name: jacoco-report
-        path: rate-limiter/target/site/jacoco/
-
+  e2e-test:
+    name: 🐳 E2E Integration (Docker+Python)
+    needs: [compile]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir Imagen Docker
+        run: docker build -t ratelimiter-app:latest ./rate-limiter
+      - name: Levantar Contenedor en Background
+        run: |
+          docker run -d -p 8080:8080 --name ratelimiter ratelimiter-app:latest
+          sleep 5
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Correr Ataque (Load Test)
+        run: python rate-limiter/load_test.py --requests 500 --users 5 --host http://127.0.0.1:8080
+      - name: Imprimir Logs si falla
+        if: failure()
+        run: docker logs ratelimiter
