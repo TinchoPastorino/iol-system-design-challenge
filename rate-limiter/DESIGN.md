@@ -89,6 +89,11 @@ El sistema cuenta con una pirámide de pruebas automatizadas:
 1.  **Unit Tests (JUnit 5):** Pruebas puras sobre la lógica del algoritmo de Token Bucket y el cálculo de nanosegundos. Garantizan que el motor del Rate Limiter sea matemáticamente correcto.
 2.  **Transport Layer Tests (Mockito):** Se utiliza **Mocking** para probar el `RateLimiterHttpServer` de forma aislada. Verificamos que los Handlers devuelvan los códigos HTTP correctos (200, 400, 405, 429) y los headers requeridos (`X-RateLimit-*`, `Retry-After`) sin necesidad de levantar un servidor real.
 3.  **Manual Stress Test (Python):** Script de carga para validación visual de métricas y dashboards.
+4.  **Integración Continua (CI/CD Avanzado):** Se implementó una arquitectura de *Granular Checks* en **GitHub Actions** que orquesta todo lo anterior:
+    *   **Matrix Testing:** El algoritmo se prueba simultáneamente contra las versiones LTS **Java 17** y **Java 21**, asegurando *forward-compatibility*.
+    *   **Cobertura en Vivo:** Se utiliza el plugin `jacoco-maven-plugin` acoplado a un bot que inyecta los resultados del *Code Coverage* como un comentario directamente en la vista del Pull Request.
+    *   **E2E Integration:** Un runner paralelo levanta el `Dockerfile` de producción temporalmente para lanzarle el script `load_test.py` verificando el ciclo HTTP/TCP completo real.
+    *   **Seguridad:** Dependabot vigila el ecosistema de dependencias en `pom.xml` buscando parchear proactivamente vulnerabilidades *Zero-Day* semanales.
 
 Para ejecutar los tests automáticos:
 ```bash
