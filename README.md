@@ -1,4 +1,5 @@
 # System Design Implementation Challenge - Rate Limiter
+[![Rate Limiter CI](https://github.com/TinchoPastorino/iol-system-design-challenge/actions/workflows/ci.yml/badge.svg)](https://github.com/TinchoPastorino/iol-system-design-challenge/actions/workflows/ci.yml)
 
 Este repositorio contiene la implementación de un **Rate Limiter** de alto rendimiento basado en el algoritmo **Token Bucket**, diseñado siguiendo los conceptos del libro *“System Design Interview – An Insider’s Guide”* de Alex Xu.
 
@@ -76,6 +77,16 @@ Si usaste la **Opción 1 (Docker Compose)**, podés entrar al [Dashboard de Graf
 - Latencia de procesamiento (Avg/Max).
 - Salud de la JVM (Hilos, Memoria Heap).
 - Logs centralizados con Loki entrando en vivo.
+
+---
+
+## 🤖 Integración Continua (CI/CD)
+El proyecto utiliza **GitHub Actions** para garantizar máxima resiliencia. Cada *Push* o *Pull Request* hacia la rama `main` dispara automáticamente un pipeline con 4 *Jobs* independientes y asíncronos:
+1. **Compile:** Verificación estricta de sintaxis en milisegundos.
+2. **Unit Tests (Matrix):** Corroboración matemática del Tokens Bucket ejecutada en simultáneo para **Java 17 (LTS)** y **Java 21 (LTS)**.
+3. **Code Coverage:** Integración pura con **JaCoCo** donde un bot inyecta los resultados y porcentajes testeados directamente como un comentario en el *Pull Request*.
+4. **Integration (E2E):** Despliegue del `Dockerfile` y ráfagas de prueba (Python Load Test) probando conexiones y respuestas TCP/HTTP en vivo.
+Adicionalmente, se configuró a **Dependabot** para monitorear silenciosamente las dependencias del `pom.xml` ante posibles amenazas CVE Zero-Day semanales.
 
 ---
 
