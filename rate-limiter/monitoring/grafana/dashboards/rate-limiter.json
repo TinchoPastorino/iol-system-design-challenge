@@ -110,6 +110,19 @@
         { "expr": "{container=\"rate-limiter-rate-limiter-1\"}", "refId": "A" }
       ],
       "options": { "showTime": true, "sortOrder": "Descending", "enableLogDetails": true, "showCommonLabels": false, "wrapLogMessage": true }
+    },
+    {
+      "title": "Blocked Users Ranking",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 20, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "rate_limiter_rejected_by_user_total", "instant": true, "format": "table" }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "Value", "desc": true }]
+      }
     }
   ],
   "refresh": "5s",

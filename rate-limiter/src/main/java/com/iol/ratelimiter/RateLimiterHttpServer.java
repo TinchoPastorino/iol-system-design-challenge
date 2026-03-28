@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -25,6 +26,7 @@ public class RateLimiterHttpServer {
     private static int port = 8080;
 
     private final RateLimiter rateLimiter;
+    private final ConcurrentHashMap<String, AtomicLong> rejectedPerUser = new ConcurrentHashMap<>();
 
     public RateLimiterHttpServer(RateLimiter rateLimiter) {
         this.rateLimiter = rateLimiter;
@@ -33,9 +35,9 @@ public class RateLimiterHttpServer {
     public void start(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         LatencyTracker latencyTracker = new LatencyTracker();
-        server.createContext("/allow", new AllowEndpointHandler(rateLimiter, latencyTracker));
+        server.createContext("/allow", new AllowEndpointHandler(rateLimiter, latencyTracker, rejectedPerUser));
         server.createContext("/metrics", new MetricsEndpointHandler(rateLimiter, latencyTracker));
-        server.createContext("/metrics/prometheus", new PrometheusEndpointHandler(rateLimiter, latencyTracker));
+        server.createContext("/metrics/prometheus", new PrometheusEndpointHandler(rateLimiter, latencyTracker, rejectedPerUser));
         server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
         server.start();
         logger.info("Rate Limiter HTTP server started on port " + port);
@@ -116,10 +118,13 @@ public class RateLimiterHttpServer {
     static class PrometheusEndpointHandler implements HttpHandler {
         private final RateLimiter rateLimiter;
         private final LatencyTracker latencyTracker;
+        private final ConcurrentHashMap<String, AtomicLong> rejectedPerUser;
 
-        public PrometheusEndpointHandler(RateLimiter rateLimiter, LatencyTracker latencyTracker) {
+        public PrometheusEndpointHandler(RateLimiter rateLimiter, LatencyTracker latencyTracker,
+                ConcurrentHashMap<String, AtomicLong> rejectedPerUser) {
             this.rateLimiter = rateLimiter;
             this.latencyTracker = latencyTracker;
+            this.rejectedPerUser = rejectedPerUser;
         }
 
         @Override
@@ -145,9 +150,15 @@ public class RateLimiterHttpServer {
             sb.append("# HELP rate_limiter_latency_max_ms Maximum processing latency in milliseconds\n");
             sb.append("# TYPE rate_limiter_latency_max_ms gauge\n");
             sb.append("rate_limiter_latency_max_ms ").append(String.format("%.3f", latencyTracker.getMaxLatencyMs())).append("\n");
-            sb.append("# HELP rate_limiter_active_users Number of users currently tracked in memory\n");
-            sb.append("# TYPE rate_limiter_active_users gauge\n");
             sb.append("rate_limiter_active_users ").append(rateLimiter.getActiveUsers()).append("\n");
+            
+            // Per-user rejection metrics
+            sb.append("# HELP rate_limiter_rejected_by_user_total Total number of rejected requests by userId\n");
+            sb.append("# TYPE rate_limiter_rejected_by_user_total counter\n");
+            rejectedPerUser.forEach((userId, count) -> {
+                sb.append("rate_limiter_rejected_by_user_total{userId=\"").append(userId).append("\"} ")
+                  .append(count.get()).append("\n");
+            });
 
             // Basic JVM metrics
             Runtime runtime = Runtime.getRuntime();
@@ -172,10 +183,13 @@ public class RateLimiterHttpServer {
     static class AllowEndpointHandler implements HttpHandler {
         private final RateLimiter rateLimiter;
         private final LatencyTracker latencyTracker;
+        private final ConcurrentHashMap<String, AtomicLong> rejectedPerUser;
 
-        public AllowEndpointHandler(RateLimiter rateLimiter, LatencyTracker latencyTracker) {
+        public AllowEndpointHandler(RateLimiter rateLimiter, LatencyTracker latencyTracker,
+                ConcurrentHashMap<String, AtomicLong> rejectedPerUser) {
             this.rateLimiter = rateLimiter;
             this.latencyTracker = latencyTracker;
+            this.rejectedPerUser = rejectedPerUser;
         }
 
         @Override
@@ -206,6 +220,9 @@ public class RateLimiterHttpServer {
                 if (allowed) {
                     sendResponse(exchange, 200, "OK: Request Allowed");
                 } else {
+                    // Record per-user rejection
+                    rejectedPerUser.computeIfAbsent(userId, k -> new AtomicLong(0)).incrementAndGet();
+                    
                     long waitMillis = rateLimiter.getWaitTimeMillis(userId);
                     // Standard Retry-After header expects seconds (integer)
                     long retryAfterSeconds = (long) Math.ceil(waitMillis / 1000.0);

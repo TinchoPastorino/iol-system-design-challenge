@@ -44,15 +44,21 @@ El proyecto no es solo código; es "operable". Se implementó un stack completo 
 ### 3. Dashboard (Grafana)
 - Un dashboard auto-provisionado muestra en tiempo real la salud del sistema. Permite detectar ataques (picos rojos) o degradación de performance (picos de latencia) al instante.
 
+### 4. Métricas por Usuario y Cardinalidad
+- **Decisión:** Se habilitó el rastreo de rechazos por `userId` (`rate_limiter_rejected_by_user_total`).
+- **Consideración técnica:** Somos conscientes de que en un entorno de producción masivo, usar IDs únicos como etiquetas de Prometheus rompe la cardinalidad y puede degradar el performance del motor de métricas. 
+- **Justificación:** Se incluye en este challenge para demostrar capacidades de **observabilidad granular** y facilitar el debugging de abusos. En una implementación real a gran escala, esta métrica se enviaría a un sistema de logs (como Loki) o se agregaría por dimensiones más gruesas (como Región o Tier de Usuario).
+
 ---
 
 ## 🚀 Escalabilidad Futura (System Design Interview)
 
-Si este sistema debiera escalar para manejar **millones de requests por segundo** en IOL, el camino de evolución sería:
+Si este sistema debiera escalar para manejar **millones de requests por segundo** en un entorno de alta demanda, el camino de evolución sería:
 
 1.  **Load Balancer con Sticky Sessions:** Usar Consistent Hashing (por `userId` o IP) para asegurar que un usuario siempre caiga en el mismo nodo. Esto mantiene la ventaja de la latencia de RAM local sin necesidad de una base centralizada.
 2.  **Capa Central de Estado (Redis):** Si la precisión absoluta entre nodos es requerida, se reemplazaría la lógica de `Bucket.java` por un script de LUA en Redis. Esto permitiría escalabilidad horizontal infinita a costa de un ligero incremento en la latencia.
 3.  **Local Cache + Redis:** Un esquema híbrido donde se descuentan tokens localmente y se sincronizan en lotes (batch) con Redis para balancear precisión y velocidad.
+4.  **Java 21 (Virtual Threads):** Migrar a Java 21 permitiría reemplazar el pool de hilos fijos por `Virtual Threads` (Proyecto Loom), escalando a millones de peticiones concurrentes con un impacto mínimo en el consumo de memoria del sistema operativo y eliminando cuellos de botella por hilos bloqueados.
 
 ---
 

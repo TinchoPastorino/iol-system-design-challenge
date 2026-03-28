@@ -40,6 +40,15 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.1.2</version>
             </plugin>
+            <!-- Exec plugin to run the application from the console -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <mainClass>com.iol.ratelimiter.RateLimiterHttpServer</mainClass>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>
