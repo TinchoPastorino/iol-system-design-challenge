@@ -1,0 +1,59 @@
+name: Rate Limiter CI
+
+on:
+  push:
+    branches: [ "main", "feature/*" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    name: Build, Test & E2E Validation
+    runs-on: ubuntu-latest
+    
+    # Defaults para que todos los comandos 'run' se ejecuten en la carpeta rate-limiter
+    defaults:
+      run:
+        working-directory: rate-limiter
+
+    steps:
+    # 1. Trae el código del repositorio a la máquina virtual
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # 2. Instala Java 17 en la máquina para poder correr Maven
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+
+    # 3. Construye el proyecto y ejecuta los Unit Tests (BucketTest, etc)
+    - name: Build and run Unit Tests (Maven)
+      run: mvn -B package
+
+    # 4. Construye la imagen de Docker para asegurarnos que el Dockerfile funciona
+    - name: Build Docker Image
+      run: docker build -t ratelimiter-app:latest .
+
+    # 5. Ejecuta la imagen de Docker en background (E2E Environment)
+    - name: Start Docker Container (Background)
+      run: |
+        docker run -d -p 8080:8080 --name ratelimiter ratelimiter-app:latest
+        sleep 5 # Esperar 5 segs a que la JVM y el HTTPServer arranquen
+
+    # 6. Prepara Python para poder lanzar nuestro Load Test
+    - name: Set up Python for Integration Test
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    # 7. Ejecuta el Load Test (Prueba Black-box de Integración y Estrés)
+    - name: Run E2E Load Test (Python)
+      run: python load_test.py --requests 500 --users 5 --host http://127.0.0.1:8080
+
+    # 8. (Opcional) Si algo falló en el pipeline, imprime los logs del servidor HTTP
+    - name: Check Container Logs (On Failure)
+      if: failure()
+      run: docker logs ratelimiter
