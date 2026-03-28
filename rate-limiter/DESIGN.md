@@ -83,9 +83,17 @@ graph TD
 
 ---
 
-## 🛠️ Verificación y Test de Carga
-El sistema fue validado con:
-- **Unit Tests (JUnit 5):** Verifican la matemática de los tokens y la concurrencia.
+## 🛠️ Verificación y Testeo
+El sistema cuenta con una pirámide de pruebas automatizadas:
+
+1.  **Unit Tests (JUnit 5):** Pruebas puras sobre la lógica del algoritmo de Token Bucket y el cálculo de nanosegundos. Garantizan que el motor del Rate Limiter sea matemáticamente correcto.
+2.  **Transport Layer Tests (Mockito):** Se utiliza **Mocking** para probar el `RateLimiterHttpServer` de forma aislada. Verificamos que los Handlers devuelvan los códigos HTTP correctos (200, 400, 405, 429) y los headers requeridos (`X-RateLimit-*`, `Retry-After`) sin necesidad de levantar un servidor real.
+3.  **Manual Stress Test (Python):** Script de carga para validación visual de métricas y dashboards.
+
+Para ejecutar los tests automáticos:
+```bash
+mvn test
+```
 ---
 
 ## 🤖 Uso de IA y Colaboración
