@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Escanea las dependencias de Maven (ej. mockito, junit)
+  - package-ecosystem: "maven"
+    directory: "/rate-limiter"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Escanea los Actions que usamos en el pipeline (ej. actions/checkout@v4)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

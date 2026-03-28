@@ -8,8 +8,11 @@ on:
 
 jobs:
   build-and-test:
-    name: Build, Test & E2E Validation
+    name: Build, Test & E2E Validation - Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-version: ['17', '21']
     
     # Defaults para que todos los comandos 'run' se ejecuten en la carpeta rate-limiter
     defaults:
@@ -21,11 +24,11 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # 2. Instala Java 17 en la máquina para poder correr Maven
-    - name: Set up JDK 17
+    # 2. Instala Java en la máquina para poder correr Maven
+    - name: Set up JDK ${{ matrix.java-version }}
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: ${{ matrix.java-version }}
         distribution: 'temurin'
         cache: maven
 
@@ -57,3 +60,12 @@ jobs:
     - name: Check Container Logs (On Failure)
       if: failure()
       run: docker logs ratelimiter
+
+    # 9. Sube el reporte HTML de JaCoCo (solo para Java 17 para evitar duplicados)
+    - name: Upload JaCoCo Code Coverage Report
+      uses: actions/upload-artifact@v4
+      if: matrix.java-version == '17'
+      with:
+        name: jacoco-report
+        path: rate-limiter/target/site/jacoco/
+
