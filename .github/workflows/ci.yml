@@ -46,7 +46,7 @@ jobs:
         run: mvn -B test
       - name: Upload JaCoCo XML (para el paso de coverage)
         if: matrix.java-version == '17'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco-report
           path: rate-limiter/target/site/jacoco/jacoco.xml
