@@ -1,0 +1,126 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Requests Rate (per second)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 20, "spanNulls": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Allowed/s" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Rejected/s" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+        ]
+      },
+      "targets": [
+        { "expr": "rate(rate_limiter_allowed_total[30s])", "legendFormat": "Allowed/s" },
+        { "expr": "rate(rate_limiter_rejected_total[30s])", "legendFormat": "Rejected/s" }
+      ]
+    },
+    {
+      "title": "Allowed vs Rejected",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "Allowed" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+        { "matcher": { "id": "byName", "options": "Rejected" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+      ] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] }, "pieType": "donut", "reduceOptions": { "calcs": ["lastNotNull"] }, "tooltip": { "mode": "single" } },
+      "targets": [
+        { "expr": "rate_limiter_allowed_total", "legendFormat": "Allowed" },
+        { "expr": "rate_limiter_rejected_total", "legendFormat": "Rejected" }
+      ]
+    },
+    {
+      "title": "Total Requests",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } } },
+      "targets": [{ "expr": "rate_limiter_processed_total", "legendFormat": "Total" }],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "title": "Active Users",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 5, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "purple", "value": null }] } } },
+      "targets": [{ "expr": "rate_limiter_active_users", "legendFormat": "Users" }],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "title": "Max Latency",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 10, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "ms", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "red", "value": 50 }] } } },
+      "targets": [{ "expr": "rate_limiter_latency_max_ms", "legendFormat": "Max" }],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "title": "JVM Threads",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 5, "x": 15, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "cyan", "value": null }] } } },
+      "targets": [{ "expr": "jvm_threads_current", "legendFormat": "Threads" }],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "title": "Avg Processing Latency (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 10, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "color": { "fixedColor": "yellow", "mode": "fixed" }, "custom": { "fillOpacity": 30, "spanNulls": true }, "unit": "ms" }
+      },
+      "targets": [{ "expr": "rate_limiter_latency_avg_ms", "legendFormat": "Avg Latency" }]
+    },
+    {
+      "title": "JVM Heap Memory",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 10, "x": 10, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "custom": { "fillOpacity": 15, "spanNulls": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Used" }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Max" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }, { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10,10] } }] }
+        ]
+      },
+      "targets": [
+        { "expr": "jvm_memory_used_bytes", "legendFormat": "Used" },
+        { "expr": "jvm_memory_max_bytes", "legendFormat": "Max" }
+      ]
+    },
+    {
+      "title": "Rate Limiter Logs",
+      "type": "logs",
+      "gridPos": { "h": 12, "w": 20, "x": 0, "y": 20 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "targets": [
+        { "expr": "{container=\"rate-limiter-rate-limiter-1\"}", "refId": "A" }
+      ],
+      "options": { "showTime": true, "sortOrder": "Descending", "enableLogDetails": true, "showCommonLabels": false, "wrapLogMessage": true }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "templating": {
+    "list": [
+      { "current": { "selected": false, "text": "Prometheus", "value": "prometheus" }, "hide": 2, "name": "DS_PROMETHEUS", "type": "datasource", "query": "prometheus" },
+      { "current": { "selected": false, "text": "Loki", "value": "loki" }, "hide": 2, "name": "DS_LOKI", "type": "datasource", "query": "loki" }
+    ]
+  },
+  "time": { "from": "now-5m", "to": "now" },
+  "title": "Rate Limiter Dashboard",
+  "uid": "rate-limiter-dashboard"
+}
